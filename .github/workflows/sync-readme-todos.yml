@@ -24,13 +24,11 @@ jobs:
           ref: ${{ inputs.target_branch }}
           fetch-depth: 0
       - name: Transform README TODO section
-        id: transform
         env:
           TARGET_BRANCH: ${{ inputs.target_branch }}
         run: |
           python3 - <<'PY'
-          import io, os, re, subprocess, tokenize, difflib, pathlib
-          from sequencematcher import nothing if False else None
+          import io, os, re, subprocess, tokenize, pathlib
           from difflib import SequenceMatcher
 
           def run(args, check=True):
@@ -49,13 +47,11 @@ jobs:
           changed_paths = [p.strip().replace("\\", "/") for p in diff.stdout.splitlines() if p.strip().endswith(".py")]
           print("CHANGED_PY_FILES=" + repr(changed_paths))
 
-          readme = None
+          readme = pathlib.Path("README.md")
           for p in pathlib.Path(".").iterdir():
               if p.is_file() and p.name.lower() == "readme.md":
                   readme = p
                   break
-          if readme is None:
-              readme = pathlib.Path("README.md")
 
           old_text = readme.read_text(encoding="utf-8", newline="")
           lines = old_text.splitlines(keepends=True)
@@ -67,9 +63,7 @@ jobs:
           if title_i is None:
               raise SystemExit("Complete TODO List title was not found")
 
-          entry_re = re.compile(
-              r'^(?P<lead>\s*)- \[ \] \*\*(?P<path>.+?):(?P<line>\d+)\*\* - (?P<desc>.*)$'
-          )
+          entry_re = re.compile(r'^(?P<lead>\s*)- \[ \] \*\*(?P<path>.+?):(?P<line>\d+)\*\* - (?P<desc>.*)$')
           entries = []
           first_i = None
           last_i = None
@@ -97,7 +91,6 @@ jobs:
           by_path = {}
           for e in entries:
               by_path.setdefault(e["path"], []).append(e)
-
           final_by_path = {}
           for path, es in by_path.items():
               final_by_path[path] = [{"line": e["line"], "output": e["raw"]} for e in es]
@@ -120,12 +113,8 @@ jobs:
                       comment = tok.string[1:].strip()
                       if not re.match(r"^todo\b", comment, flags=re.I):
                           continue
-                      desc = re.sub(r"^todo\b\s*:?\s*", "", comment, flags=re.I)
-                      found.append({
-                          "line": tok.start[0],
-                          "desc": desc.strip(),
-                          "norm": normalize(desc),
-                      })
+                      desc = re.sub(r"^todo\b\s*:?\s*", "", comment, flags=re.I).strip()
+                      found.append({"line": tok.start[0], "desc": desc, "norm": normalize(desc)})
               except Exception:
                   text = data.decode("utf-8", errors="replace")
                   for lineno, src in enumerate(text.splitlines(), 1):
@@ -180,17 +169,13 @@ jobs:
                   if id(n) in used:
                       continue
                   print(f"ADD {path}:{n['line']} :: {n['desc'][:120]}")
-                  items.append({
-                      "line": n["line"],
-                      "output": f'- [ ] **{path}:{n["line"]}** - {n["desc"]}\n',
-                  })
+                  items.append({"line": n["line"], "output": f'- [ ] **{path}:{n["line"]}** - {n["desc"]}\n'})
 
               final_by_path[path] = sorted(items, key=lambda x: x["line"])
 
           output_entries = []
           for path in sorted(final_by_path):
-              path_items = sorted(final_by_path[path], key=lambda x: x["line"])
-              for item in path_items:
+              for item in sorted(final_by_path[path], key=lambda x: x["line"]):
                   output_entries.append(item["output"])
 
           new_lines = lines[:first_i] + output_entries + lines[last_i + 1:]
